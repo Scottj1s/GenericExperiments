@@ -133,41 +133,6 @@ namespace WinRT
         internal static extern int WindowsDeleteString(IntPtr hstring);
     }
 
-    internal static class Box
-    {
-        private class BoxedValue<T>
-        { 
-            public BoxedValue(T value)
-            {
-                _value = value;
-            }
-            public T _value;
-        }
-
-        internal class RequireStruct<U> where U : struct { }
-        internal class RequireClass<U> where U : class { }
-
-        internal static object BoxValue<U>(U value, RequireStruct<U> _ = null) where U : struct
-        {
-            return new BoxedValue<U>(value);
-        }
-
-        internal static object BoxValue<U>(U value, RequireClass<U> _ = null) where U : class
-        {
-            return value;
-        }
-
-        internal static U UnboxValue<U>(object box, RequireStruct<U> _ = null) where U : struct
-        {
-            return ((BoxedValue<U>)box)._value;
-        }
-
-        internal static U UnboxValue<U>(object value, RequireClass<U> _ = null) where U : class
-        {
-            return (U)value;
-        }
-    }
-
     struct MarshalString
     {
         public class Cache
@@ -208,14 +173,14 @@ namespace WinRT
         }
 
         public static IntPtr GetAbi(Cache cache) => cache._handle;
-        public static IntPtr GetAbi(object box) => Box.UnboxValue<Cache>(box)._handle;
+        public static IntPtr GetAbi(object box) => ((Cache)box)._handle;
 
         public static void DisposeCache(Cache cache) => cache.Dispose();
             // no need to delete hstring reference
         public static void DisposeCache(object box) 
         {
             if (box != null)
-                DisposeCache(Box.UnboxValue<Cache>(box));
+                DisposeCache(((Cache)box));
         }
 
         public static void DisposeAbi(IntPtr hstring)
@@ -442,7 +407,7 @@ namespace WinRT
                     DisposeCacheArray = (object box) => MarshalBlittableArray.DisposeCache(box);
                     DisposeAbiArray = (object box) => MarshalBlittableArray.DisposeAbi(box);
                 }
-                else // bind to ABI counterpart's FromAbi, ToAbi marshalers
+                else // bind to ABI counterpart's marshalers
                 {
                     var CacheType = Type.GetType($"{type.Namespace}.ABI.{type.Name}+Cache");
                     CreateCache = BindCreateCache(AbiType);
@@ -461,7 +426,7 @@ namespace WinRT
             {
                 AbiType = typeof(IntPtr);
                 FromAbi = (object value) => (T)(object)MarshalString.FromAbi((IntPtr)value);
-                CreateCache = (T value) => Box.BoxValue(MarshalString.CreateCache((string)(object)value));
+                CreateCache = (T value) => MarshalString.CreateCache((string)(object)value);
                 GetAbi = (object box) => MarshalString.GetAbi(box);
                 DisposeCache = (object box) => MarshalString.DisposeCache(box);
                 DisposeAbi = (object box) => MarshalString.DisposeAbi(box);
@@ -656,64 +621,6 @@ namespace WinRT
 
         static void Report(string test, bool success) => System.Console.WriteLine("{0} {1}working", test, success ? "" : "not ");
 
-        public interface I1
-        {
-            public int MyProperty { get; }
-        }
-
-        public interface I2 : I1
-        {
-            public new int MyProperty { get; set; }
-            //int I1.MyProperty => throw new NotImplementedException();
-        }
-
-        public interface I3
-        {
-            public int MyProperty { get; }
-        }
-
-        public class C : I1, I2, I3
-        {
-            private int _prop = 0;
-
-            public int MyProperty => _prop;
-
-            int I2.MyProperty { get => ((I1)this).MyProperty; set => _prop = value; }
-        }
-
-        static void TestPropertyInheritance()
-        {
-            C c = new C();
-            int prop = ((I1)c).MyProperty;
-            ((I2)c).MyProperty = 42;
-            prop = ((I1)c).MyProperty;
-            prop = ((I2)c).MyProperty;
-            prop = ((I3)c).MyProperty;
-            prop = c.MyProperty;
-        }
-
-        class Box<T>
-        {
-            public T _value;
-        }
-
-        static Box<int> CreateBox(int value)
-        {
-            return new Box<int> { _value = value };
-        }
-
-        static void ModifyBox(object box, int value)
-        {
-            ((Box<int>)box)._value = value;
-        }
-
-        static void TestBoxedValueModification()
-        {
-            var box = CreateBox(0);
-            ModifyBox(box, 42);
-            int boxed = box._value;
-        }
-
         public struct TestExceptionRaiser
         {
             int _index;
@@ -905,12 +812,6 @@ namespace WinRT
                     System.Console.WriteLine(e);
                 }
             }
-
-            //TestBoxedValueModification();
-            //TestPropertyInheritance();
-            //var x = Marshaler<Blittable>.AbiType;
-            //var y = Marshaler<NonBlittable>.RefAbiType;
-            //GenericDelegate<int>.Test(42);
 
             // Int methods
             int in_int = 42;
